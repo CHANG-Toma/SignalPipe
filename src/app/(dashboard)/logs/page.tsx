@@ -39,6 +39,7 @@ export default function LogsPage() {
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<LogItem | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
 
   const load = useCallback(async () => {
     const params = new URLSearchParams();
@@ -65,11 +66,43 @@ export default function LogsPage() {
     load();
   }
 
+  async function clearLogs() {
+    if (
+      !window.confirm(
+        `Clear all ${total} alert log${total === 1 ? "" : "s"}? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setClearing(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/logs", { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to clear logs");
+      setSelected(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to clear logs");
+    } finally {
+      setClearing(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Alerts log"
         description={`${total} incoming alert${total === 1 ? "" : "s"} from TradingView.`}
+        action={
+          <button
+            type="button"
+            className="btn btn-danger"
+            disabled={clearing || total === 0}
+            onClick={clearLogs}
+          >
+            {clearing ? "Clearing…" : "Clear logs"}
+          </button>
+        }
       />
 
       <form onSubmit={onFilter} className="flex flex-wrap gap-3">

@@ -51,3 +51,14 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ items, total, take, skip });
 }
+
+/** Clear all webhook events (+ cascaded order attempts). */
+export async function DELETE() {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const result = await prisma.webhookEvent.deleteMany({});
+  return NextResponse.json({ ok: true, deleted: result.count });
+}

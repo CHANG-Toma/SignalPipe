@@ -147,7 +147,8 @@ async function routeOne(
         side: alert.action,
         quantity: qty,
         symbol,
-        brokerAccountId: account.id === "settings" ? null : account.id,
+        brokerAccountId:
+          account.id === "settings" || account.id === "dry-run" ? null : account.id,
         requestPayload: JSON.stringify({ ...requestPreview, ...extra }),
         errorMessage,
       },
@@ -203,9 +204,13 @@ async function routeOne(
         side: alert.action,
         quantity: qty,
         symbol,
-        brokerAccountId: account.id === "settings" ? null : account.id,
+        brokerAccountId:
+          account.id === "settings" || account.id === "dry-run" ? null : account.id,
         requestPayload: JSON.stringify({ ...requestPreview, netPos, plan }),
-        responsePayload: JSON.stringify({ note: "dry-run: order not sent" }),
+        responsePayload: JSON.stringify({
+          note: "dry-run: order not sent to Tradovate",
+          simulated: true,
+        }),
       },
     });
     return { status: OrderStatus.SKIPPED, dryRun: true, attemptId: attempt.id };
@@ -312,11 +317,37 @@ export async function routeOrder(
   const accounts = await resolveAccounts(alert, settings);
 
   if (accounts.length === 0) {
+    // Dry-run works without a Tradovate account (local pipeline tests).
+    if (settings.tradingMode === "dry-run") {
+      const synthetic: BrokerAccount = {
+        id: "dry-run",
+        name: "Dry-run (no account)",
+        accountId: alert.accountId || "0",
+        accountSpec: "DRYRUN",
+        environment: settings.tradovateEnv,
+        enabled: true,
+        isPrimary: true,
+        quantityMultiplier: 1,
+        notes: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      return routeOne(
+        eventId,
+        alert,
+        settings,
+        synthetic,
+        1,
+        tradovateSymbol,
+        lotSize,
+      );
+    }
+
     const attempt = await prisma.orderAttempt.create({
       data: {
         webhookEventId: eventId,
         status: OrderStatus.FAILED,
-        dryRun: settings.tradingMode === "dry-run",
+        dryRun: false,
         side: alert.action,
         quantity: alert.quantity ?? settings.defaultQty,
         symbol: tradovateSymbol,
@@ -326,7 +357,7 @@ export async function routeOrder(
     });
     return {
       status: OrderStatus.FAILED,
-      dryRun: settings.tradingMode === "dry-run",
+      dryRun: false,
       attemptId: attempt.id,
       errorMessage: attempt.errorMessage ?? undefined,
     };
