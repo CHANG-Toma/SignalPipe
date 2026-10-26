@@ -260,10 +260,14 @@ export default function AccountsPage() {
             </div>
           </Panel>
 
-          <Panel title="Connect Tradovate (Lucid)" className="max-w-xl">
+          <Panel title="Connect Tradovate" className="max-w-xl">
           <form onSubmit={connectAccount} className="grid gap-3">
             <p className="text-xs text-[var(--text-muted)]">
-              Use the username and password Tradovate gave you. SignalPipe logs in and imports every trading account on that login.
+              Needs a personal live Tradovate account (≥ $1k) with the API Access add-on ($25/mo) — prop / Lucid /
+              evaluation accounts cannot register an API key. Put{" "}
+              <span className="font-mono">TRADOVATE_CID</span> / <span className="font-mono">TRADOVATE_SEC</span> in{" "}
+              <span className="font-mono">.env</span>, restart, then connect with that account’s username/password.
+              Account ID and spec are imported automatically.
             </p>
             <input
               name="username"

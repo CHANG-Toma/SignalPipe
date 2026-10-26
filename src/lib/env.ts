@@ -8,6 +8,9 @@ const envSchema = z.object({
   ADMIN_PASSWORD: z.string().optional(),
   WEBHOOK_SECRET: z.string().optional(),
   TRADOVATE_ENV: z.enum(["demo", "live"]).default("demo"),
+  /** Tradovate API app key (Application Settings → API Access) */
+  TRADOVATE_CID: z.string().optional(),
+  TRADOVATE_SEC: z.string().optional(),
   TRADING_MODE: z.enum(["dry-run", "demo", "live"]).default("dry-run"),
   DEFAULT_SYMBOL: z.string().optional(),
   DEFAULT_QTY: z.string().optional(),

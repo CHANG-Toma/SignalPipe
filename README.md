@@ -65,8 +65,13 @@ curl -X POST "http://localhost:3000/api/webhook/YOUR_WEBHOOK_SECRET" \
 
 ## Tradovate credentials
 
-Add accounts in the **Accounts** UI with your Lucid username and password.
-SignalPipe authenticates and imports account ID / spec automatically — nothing Tradovate-related belongs in `.env`.
+Tradovate’s REST API requires a **personal live brokerage account** (not prop / evaluation / Lucid), ≥ **$1,000**, and the **API Access** add-on (**$25/mo**).
+
+1. Web Trader → **Application Settings** → **API Access** → Subscribe → self-attestation → **Generate API Key**.
+2. Copy **CID** + **Secret** once into `.env` as `TRADOVATE_CID` / `TRADOVATE_SEC` (shown only once).
+3. On **Accounts**, connect with that account’s Tradovate username / password — SignalPipe imports account ID / spec.
+
+API Access does **not** include CME real-time market data (separate CME sub-vendor path). Prop-firm logins cannot register an API app.
 
 Official API: [https://api.tradovate.com/](https://api.tradovate.com/)
 
