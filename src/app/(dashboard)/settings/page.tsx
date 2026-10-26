@@ -11,8 +11,6 @@ type Settings = {
   defaultSymbol: string;
   defaultQty: number;
   killSwitch: boolean;
-  accountId: string;
-  accountSpec: string;
   webhookSecretMasked: string;
 };
 
@@ -62,8 +60,6 @@ export default function SettingsPage() {
       tradovateEnv: settings.tradovateEnv,
       defaultSymbol: settings.defaultSymbol,
       defaultQty: settings.defaultQty,
-      accountId: settings.accountId,
-      accountSpec: settings.accountSpec,
     };
     if (newSecret.trim()) payload.webhookSecret = newSecret.trim();
 
@@ -84,7 +80,8 @@ export default function SettingsPage() {
 
   async function addMapping(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const form = new FormData(e.currentTarget);
+    const formEl = e.currentTarget;
+    const form = new FormData(formEl);
     const res = await fetch("/api/mappings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -100,7 +97,7 @@ export default function SettingsPage() {
       setError("Failed to add mapping");
       return;
     }
-    e.currentTarget.reset();
+    formEl.reset();
     await load();
   }
 
@@ -180,24 +177,6 @@ export default function SettingsPage() {
               setSettings({ ...settings, defaultQty: Number(e.target.value) })
             }
             className="field font-mono"
-          />
-        </Field>
-
-        <Field label="Account ID">
-          <input
-            value={settings.accountId}
-            onChange={(e) => setSettings({ ...settings, accountId: e.target.value })}
-            className="field font-mono"
-            placeholder="Tradovate numeric accountId"
-          />
-        </Field>
-
-        <Field label="Account spec">
-          <input
-            value={settings.accountSpec}
-            onChange={(e) => setSettings({ ...settings, accountSpec: e.target.value })}
-            className="field font-mono"
-            placeholder="e.g. DEMO1234567"
           />
         </Field>
 

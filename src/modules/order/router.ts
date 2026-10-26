@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import type { AppSettings, TradingMode } from "@/lib/settings";
 import { buildBrackets } from "@/modules/order/brackets";
 import { planPositionAction } from "@/modules/order/policy";
+import { authFromBrokerAccount } from "@/modules/tradovate/account-auth";
 import {
   flattenSymbol,
   getNetPosition,
@@ -48,7 +49,6 @@ export type RouteResult = {
 
 async function resolveAccounts(
   alert: ParsedAlert,
-  settings: AppSettings,
 ): Promise<Array<{ account: BrokerAccount; multiplier: number }>> {
   const enabled = await prisma.brokerAccount.findMany({
     where: { enabled: true },
@@ -69,27 +69,6 @@ async function resolveAccounts(
   const primary = enabled.find((a) => a.isPrimary) || enabled[0] || null;
   if (primary) {
     return [{ account: primary, multiplier: primary.quantityMultiplier }];
-  }
-
-  if (settings.accountId && settings.accountSpec) {
-    return [
-      {
-        account: {
-          id: "settings",
-          name: "Settings default",
-          accountId: settings.accountId,
-          accountSpec: settings.accountSpec,
-          environment: settings.tradovateEnv,
-          enabled: true,
-          isPrimary: true,
-          quantityMultiplier: 1,
-          notes: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-        multiplier: 1,
-      },
-    ];
   }
 
   return [];
@@ -123,6 +102,14 @@ async function routeOne(
   const dryRun = settings.tradingMode === "dry-run";
   const env = resolveEnv(settings.tradingMode, account.environment, settings.tradovateEnv);
   const accountIdNum = Number(account.accountId);
+  const auth =
+    dryRun || account.id === "dry-run"
+      ? null
+      : (() => {
+          const a = authFromBrokerAccount(account);
+          a.env = env;
+          return a;
+        })();
 
   const requestPreview = {
     action: alert.action,
@@ -148,7 +135,7 @@ async function routeOne(
         quantity: qty,
         symbol,
         brokerAccountId:
-          account.id === "settings" || account.id === "dry-run" ? null : account.id,
+          account.id === "dry-run" ? null : account.id,
         requestPayload: JSON.stringify({ ...requestPreview, ...extra }),
         errorMessage,
       },
@@ -174,9 +161,9 @@ async function routeOne(
 
   // Position policy (live or dry-run simulation)
   let netPos = 0;
-  if (!dryRun && accountIdNum) {
+  if (!dryRun && auth && accountIdNum) {
     try {
-      const pos = await getNetPosition(env, accountIdNum, symbol);
+      const pos = await getNetPosition(auth, accountIdNum, symbol);
       netPos = pos.netPos;
     } catch {
       netPos = 0;
@@ -205,7 +192,7 @@ async function routeOne(
         quantity: qty,
         symbol,
         brokerAccountId:
-          account.id === "settings" || account.id === "dry-run" ? null : account.id,
+          account.id === "dry-run" ? null : account.id,
         requestPayload: JSON.stringify({ ...requestPreview, netPos, plan }),
         responsePayload: JSON.stringify({
           note: "dry-run: order not sent to Tradovate",
@@ -220,6 +207,13 @@ async function routeOne(
     return skipAttempt(OrderStatus.FAILED, "Missing Tradovate accountId / accountSpec");
   }
 
+  if (!auth) {
+    return skipAttempt(
+      OrderStatus.FAILED,
+      "Tradovate credentials missing on this account — edit Accounts and set username/password",
+    );
+  }
+
   const pending = await prisma.orderAttempt.create({
     data: {
       webhookEventId: eventId,
@@ -228,7 +222,8 @@ async function routeOne(
       side: alert.action,
       quantity: qty,
       symbol,
-      brokerAccountId: account.id === "settings" ? null : account.id,
+      brokerAccountId:
+        account.id === "dry-run" ? null : account.id,
       requestPayload: JSON.stringify({ ...requestPreview, netPos, plan }),
     },
   });
@@ -239,7 +234,7 @@ async function routeOne(
 
     if (plan.flattenFirst) {
       try {
-        await flattenSymbol(env, accountIdNum, symbol);
+        await flattenSymbol(auth, accountIdNum, symbol);
       } catch {
         // no position is acceptable
       }
@@ -268,9 +263,9 @@ async function routeOne(
           bracket1: brackets.bracket1,
           ...(brackets.bracket2 ? { bracket2: brackets.bracket2 } : {}),
         };
-        response = await placeOso(env, oso);
+        response = await placeOso(auth, oso);
       } else {
-        response = await placeOrder(env, base);
+        response = await placeOrder(auth, base);
       }
 
       const r = response as { orderId?: number; id?: number };
@@ -314,7 +309,7 @@ export async function routeOrder(
     settings.defaultSymbol,
   );
   const lotSize = await resolveLotSize(alert.symbol);
-  const accounts = await resolveAccounts(alert, settings);
+  const accounts = await resolveAccounts(alert);
 
   if (accounts.length === 0) {
     // Dry-run works without a Tradovate account (local pipeline tests).
@@ -328,7 +323,8 @@ export async function routeOrder(
         enabled: true,
         isPrimary: true,
         quantityMultiplier: 1,
-        notes: null,
+        username: null,
+        passwordEnc: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };

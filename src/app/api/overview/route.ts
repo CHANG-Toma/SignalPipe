@@ -3,6 +3,7 @@ import { OrderStatus } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getAppSettings } from "@/lib/settings";
+import { authFromBrokerAccount } from "@/modules/tradovate/account-auth";
 import { pingTradovate } from "@/modules/tradovate/client";
 
 export async function GET() {
@@ -14,6 +15,11 @@ export async function GET() {
   const settings = await getAppSettings();
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
+
+  const primaryAccount = await prisma.brokerAccount.findFirst({
+    where: { enabled: true },
+    orderBy: [{ isPrimary: "desc" }, { name: "asc" }],
+  });
 
   const [recentEvents, ordersToday, failedToday, tradovate] = await Promise.all([
     prisma.webhookEvent.findMany({
@@ -35,7 +41,12 @@ export async function GET() {
     }),
     settings.tradingMode === "dry-run"
       ? Promise.resolve({ ok: true, message: "Dry-run mode (API not called)" })
-      : pingTradovate(settings.tradovateEnv),
+      : primaryAccount?.username && primaryAccount.passwordEnc
+        ? pingTradovate(authFromBrokerAccount(primaryAccount))
+        : Promise.resolve({
+            ok: false,
+            message: "No Tradovate credentials on Accounts — add username/password there",
+          }),
   ]);
 
   return NextResponse.json({

@@ -1,21 +1,21 @@
-import { getAccessToken, getTradovateBaseUrl } from "./auth";
+import { getAccessToken, getTradovateBaseUrl, type TradovateAuth } from "./auth";
 import type {
   ContractFindResponse,
   LiquidatePositionRequest,
   PlaceOrderRequest,
   PlaceOrderResponse,
   PlaceOsoRequest,
-  TradovateEnvironment,
+  TradovateAccount,
   TradovatePosition,
 } from "./types";
 
 async function tradovateFetch<T>(
-  env: TradovateEnvironment,
+  auth: TradovateAuth,
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const token = await getAccessToken(env);
-  const res = await fetch(`${getTradovateBaseUrl(env)}${path}`, {
+  const token = await getAccessToken(auth);
+  const res = await fetch(`${getTradovateBaseUrl(auth.env)}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -45,63 +45,66 @@ async function tradovateFetch<T>(
 }
 
 export async function placeOrder(
-  env: TradovateEnvironment,
+  auth: TradovateAuth,
   order: PlaceOrderRequest,
 ): Promise<PlaceOrderResponse> {
   if (order.isAutomated !== true) {
     throw new Error("isAutomated must be true for automated orders");
   }
-  return tradovateFetch<PlaceOrderResponse>(env, "/order/placeorder", {
+  return tradovateFetch<PlaceOrderResponse>(auth, "/order/placeorder", {
     method: "POST",
     body: JSON.stringify(order),
   });
 }
 
-/** Entry + optional SL/TP brackets (OCO when both brackets set). */
 export async function placeOso(
-  env: TradovateEnvironment,
+  auth: TradovateAuth,
   order: PlaceOsoRequest,
 ): Promise<PlaceOrderResponse> {
   if (order.isAutomated !== true) {
     throw new Error("isAutomated must be true for automated orders");
   }
-  return tradovateFetch<PlaceOrderResponse>(env, "/order/placeoso", {
+  return tradovateFetch<PlaceOrderResponse>(auth, "/order/placeoso", {
     method: "POST",
     body: JSON.stringify(order),
   });
 }
 
 export async function findContract(
-  env: TradovateEnvironment,
+  auth: TradovateAuth,
   symbol: string,
 ): Promise<ContractFindResponse> {
   const encoded = encodeURIComponent(symbol);
-  return tradovateFetch<ContractFindResponse>(
-    env,
-    `/contract/find?name=${encoded}`,
-  );
+  return tradovateFetch<ContractFindResponse>(auth, `/contract/find?name=${encoded}`);
 }
 
-export async function listPositions(
-  env: TradovateEnvironment,
-): Promise<TradovatePosition[]> {
+export async function listAccounts(auth: TradovateAuth): Promise<TradovateAccount[]> {
+  const data = await tradovateFetch<TradovateAccount[] | TradovateAccount>(
+    auth,
+    "/account/list",
+  );
+  const rows = Array.isArray(data) ? data : data ? [data] : [];
+  return rows.filter((a) => a?.id != null && a?.name);
+}
+
+export async function listPositions(auth: TradovateAuth): Promise<TradovatePosition[]> {
   const data = await tradovateFetch<TradovatePosition[] | TradovatePosition>(
-    env,
+    auth,
     "/position/list",
   );
   return Array.isArray(data) ? data : data ? [data] : [];
 }
 
 export async function getNetPosition(
-  env: TradovateEnvironment,
+  auth: TradovateAuth,
   accountId: number,
   symbol: string,
 ): Promise<{ netPos: number; netPrice?: number; contractId?: number }> {
-  const contract = await findContract(env, symbol);
+  const contract = await findContract(auth, symbol);
   if (!contract?.id) {
     return { netPos: 0 };
   }
-  const positions = await listPositions(env);
+  const positions = await listPositions(auth);
   const pos = positions.find(
     (p) => p.accountId === accountId && p.contractId === contract.id,
   );
@@ -113,25 +116,25 @@ export async function getNetPosition(
 }
 
 export async function liquidatePosition(
-  env: TradovateEnvironment,
+  auth: TradovateAuth,
   body: LiquidatePositionRequest,
 ): Promise<unknown> {
-  return tradovateFetch(env, "/order/liquidateposition", {
+  return tradovateFetch(auth, "/order/liquidateposition", {
     method: "POST",
     body: JSON.stringify({ ...body, admin: body.admin ?? false }),
   });
 }
 
 export async function flattenSymbol(
-  env: TradovateEnvironment,
+  auth: TradovateAuth,
   accountId: number,
   symbol: string,
 ): Promise<unknown> {
-  const contract = await findContract(env, symbol);
+  const contract = await findContract(auth, symbol);
   if (!contract?.id) {
     throw new Error(`Contract not found for symbol ${symbol}`);
   }
-  return liquidatePosition(env, {
+  return liquidatePosition(auth, {
     accountId,
     contractId: contract.id,
     admin: false,
@@ -139,11 +142,16 @@ export async function flattenSymbol(
 }
 
 export async function pingTradovate(
-  env: TradovateEnvironment,
-): Promise<{ ok: boolean; message: string }> {
+  auth: TradovateAuth,
+): Promise<{ ok: boolean; message: string; accounts?: TradovateAccount[] }> {
   try {
-    await getAccessToken(env);
-    return { ok: true, message: `Connected to Tradovate ${env}` };
+    await getAccessToken(auth);
+    const accounts = await listAccounts(auth);
+    return {
+      ok: true,
+      message: `Connected as ${auth.username} (${accounts.length} account${accounts.length === 1 ? "" : "s"})`,
+      accounts,
+    };
   } catch (err) {
     return {
       ok: false,

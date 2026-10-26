@@ -14,7 +14,8 @@ type Account = {
   enabled: boolean;
   isPrimary: boolean;
   quantityMultiplier: number;
-  notes: string | null;
+  username: string | null;
+  hasPassword: boolean;
 };
 
 type SymbolRow = {
@@ -33,7 +34,9 @@ export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [symbols, setSymbols] = useState<SymbolRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [tab, setTab] = useState<"accounts" | "symbols">("accounts");
+  const [busy, setBusy] = useState(false);
 
   async function load() {
     const [aRes, sRes] = await Promise.all([
@@ -53,28 +56,51 @@ export default function AccountsPage() {
     load();
   }, []);
 
-  async function addAccount(e: FormEvent<HTMLFormElement>) {
+  async function connectAccount(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const form = new FormData(e.currentTarget);
+    setError(null);
+    setMessage(null);
+    setBusy(true);
+    const formEl = e.currentTarget;
+    const form = new FormData(formEl);
     const res = await fetch("/api/accounts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: form.get("name"),
-        accountId: form.get("accountId"),
-        accountSpec: form.get("accountSpec"),
+        username: form.get("username"),
+        password: form.get("password"),
         environment: form.get("environment"),
+        name: String(form.get("name") || "") || null,
         isPrimary: form.get("isPrimary") === "on",
-        quantityMultiplier: Number(form.get("quantityMultiplier") || 1),
-        notes: String(form.get("notes") || "") || null,
       }),
     });
+    const data = await res.json().catch(() => ({}));
+    setBusy(false);
     if (!res.ok) {
-      setError("Failed to add account");
+      setError(data.error || "Connection failed");
       return;
     }
-    e.currentTarget.reset();
+    formEl.reset();
+    setMessage(data.message || "Account connected");
     await load();
+  }
+
+  async function testAccount(account: Account) {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    const res = await fetch("/api/accounts/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: account.id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok || !data.ok) {
+      setError(data.message || "Connection failed");
+      return;
+    }
+    setMessage(data.message || "Connected");
   }
 
   async function toggleAccount(account: Account, patch: Partial<Account>) {
@@ -93,7 +119,8 @@ export default function AccountsPage() {
 
   async function addSymbol(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const form = new FormData(e.currentTarget);
+    const formEl = e.currentTarget;
+    const form = new FormData(formEl);
     const res = await fetch("/api/symbols", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -111,7 +138,7 @@ export default function AccountsPage() {
       setError("Failed to add symbol mapping");
       return;
     }
-    e.currentTarget.reset();
+    formEl.reset();
     await load();
   }
 
@@ -124,7 +151,7 @@ export default function AccountsPage() {
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Accounts"
-        description="Link Tradovate accounts and map TradingView symbols to contracts."
+        description="Connect with your Tradovate username and password. Account ID and spec are fetched automatically."
         action={
           <div className="segmented">
             <button
@@ -146,6 +173,7 @@ export default function AccountsPage() {
       />
 
       {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
+      {message ? <p className="text-sm text-[var(--ok)]">{message}</p> : null}
 
       {tab === "accounts" ? (
         <>
@@ -155,10 +183,9 @@ export default function AccountsPage() {
               <thead>
                 <tr>
                   <th>Name</th>
-                  <th>Account ID</th>
                   <th>Spec</th>
                   <th>Env</th>
-                  <th>Mult</th>
+                  <th>Login</th>
                   <th>Status</th>
                   <th />
                 </tr>
@@ -166,8 +193,8 @@ export default function AccountsPage() {
               <tbody>
                 {accounts.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="!text-[var(--text-muted)]">
-                      No accounts yet. Add your Tradovate demo account below.
+                    <td colSpan={6} className="!text-[var(--text-muted)]">
+                      No accounts yet. Connect with your Tradovate username and password below.
                     </td>
                   </tr>
                 ) : (
@@ -181,10 +208,9 @@ export default function AccountsPage() {
                           </span>
                         ) : null}
                       </td>
-                      <td className="font-mono text-xs">{a.accountId}</td>
                       <td className="font-mono text-xs">{a.accountSpec}</td>
                       <td className="font-mono text-xs">{a.environment}</td>
-                      <td className="font-mono text-xs">{a.quantityMultiplier}</td>
+                      <td className="font-mono text-xs">{a.username || "—"}</td>
                       <td>
                         <StatusBadge
                           label={a.enabled ? "ON" : "OFF"}
@@ -193,6 +219,14 @@ export default function AccountsPage() {
                       </td>
                       <td className="text-right">
                         <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            className="text-xs text-[var(--text-muted)] hover:text-[var(--text)]"
+                            disabled={busy || !a.hasPassword}
+                            onClick={() => testAccount(a)}
+                          >
+                            Test
+                          </button>
                           {!a.isPrimary ? (
                             <button
                               type="button"
@@ -226,35 +260,39 @@ export default function AccountsPage() {
             </div>
           </Panel>
 
-          <Panel title="Add Tradovate account" className="max-w-xl">
-          <form onSubmit={addAccount} className="grid gap-3">
-            <input name="name" required placeholder="Display name (e.g. Demo MNQ)" className="field" />
-            <div className="grid grid-cols-2 gap-3">
-              <input name="accountId" required placeholder="Account ID (numeric)" className="field font-mono" />
-              <input name="accountSpec" required placeholder="Account spec (DEMO…)" className="field font-mono" />
-            </div>
+          <Panel title="Connect Tradovate (Lucid)" className="max-w-xl">
+          <form onSubmit={connectAccount} className="grid gap-3">
+            <p className="text-xs text-[var(--text-muted)]">
+              Use the username and password Tradovate gave you. SignalPipe logs in and imports every trading account on that login.
+            </p>
+            <input
+              name="username"
+              required
+              autoComplete="username"
+              placeholder="Username"
+              className="field font-mono"
+            />
+            <input
+              name="password"
+              type="password"
+              required
+              autoComplete="current-password"
+              placeholder="Password"
+              className="field"
+            />
             <div className="grid grid-cols-2 gap-3">
               <select name="environment" defaultValue="demo" className="field">
                 <option value="demo">demo</option>
                 <option value="live">live</option>
               </select>
-              <input
-                name="quantityMultiplier"
-                type="number"
-                step="0.1"
-                min={0.1}
-                defaultValue={1}
-                placeholder="Qty multiplier"
-                className="field"
-              />
+              <input name="name" placeholder="Label (optional)" className="field" />
             </div>
-            <input name="notes" placeholder="Notes (optional)" className="field" />
             <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-              <input name="isPrimary" type="checkbox" />
-              Set as primary account
+              <input name="isPrimary" type="checkbox" defaultChecked />
+              Set first account as primary
             </label>
-            <button type="submit" className="btn btn-primary w-fit">
-              Add account
+            <button type="submit" className="btn btn-primary w-fit" disabled={busy}>
+              {busy ? "Connecting…" : "Connect"}
             </button>
           </form>
           </Panel>

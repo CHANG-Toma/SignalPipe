@@ -21,8 +21,6 @@ async function main() {
     defaultSymbol: process.env.DEFAULT_SYMBOL ?? "MNQH5",
     defaultQty: process.env.DEFAULT_QTY ?? "1",
     killSwitch: "false",
-    accountId: process.env.TRADOVATE_ACCOUNT_ID ?? "",
-    accountSpec: process.env.TRADOVATE_ACCOUNT_SPEC ?? "",
   };
 
   for (const [key, value] of Object.entries(defaults)) {
@@ -91,27 +89,9 @@ async function main() {
     });
   }
 
-  const accountId = process.env.TRADOVATE_ACCOUNT_ID;
-  const accountSpec = process.env.TRADOVATE_ACCOUNT_SPEC;
-  if (accountId && accountSpec) {
-    await prisma.brokerAccount.upsert({
-      where: { accountId },
-      update: {
-        accountSpec,
-        environment: process.env.TRADOVATE_ENV ?? "demo",
-      },
-      create: {
-        name: "Primary Tradovate",
-        accountId,
-        accountSpec,
-        environment: process.env.TRADOVATE_ENV ?? "demo",
-        isPrimary: true,
-      },
-    });
-  }
-
   console.log(`Seeded admin user: ${email}`);
   console.log("Default settings, mappings, symbols ready.");
+  console.log("Connect a Tradovate account via the Accounts page (Lucid username/password).");
 }
 
 main()

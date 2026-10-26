@@ -65,11 +65,8 @@ curl -X POST "http://localhost:3000/api/webhook/YOUR_WEBHOOK_SECRET" \
 
 ## Tradovate credentials
 
-Fill in `.env`:
-
-- `TRADOVATE_USERNAME` / `TRADOVATE_PASSWORD`
-- `TRADOVATE_CID` / `TRADOVATE_SEC` if required
-- Account ID / Spec via **Accounts** UI (preferred)
+Add accounts in the **Accounts** UI with your Lucid username and password.
+SignalPipe authenticates and imports account ID / spec automatically — nothing Tradovate-related belongs in `.env`.
 
 Official API: [https://api.tradovate.com/](https://api.tradovate.com/)
 

@@ -8,6 +8,16 @@ export type TradovateAccessTokenResponse = {
   name?: string;
 };
 
+/** Row from GET /account/list */
+export type TradovateAccount = {
+  id: number;
+  name: string;
+  userId?: number;
+  accountType?: string;
+  active?: boolean;
+  [key: string]: unknown;
+};
+
 export type PlaceOrderRequest = {
   accountSpec: string;
   accountId: number;

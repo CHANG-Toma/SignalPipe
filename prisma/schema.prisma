@@ -54,7 +54,7 @@ model AlertMapping {
   @@index([enabled, priority])
 }
 
-/// Tradovate broker account
+/// Tradovate trading account — login via Lucid username/password; id/spec from API
 model BrokerAccount {
   id                 String   @id @default(cuid())
   name               String
@@ -64,7 +64,9 @@ model BrokerAccount {
   enabled            Boolean  @default(true)
   isPrimary          Boolean  @default(false)
   quantityMultiplier Float    @default(1)
-  notes              String?
+  username           String?
+  /// AES-GCM encrypted password
+  passwordEnc        String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

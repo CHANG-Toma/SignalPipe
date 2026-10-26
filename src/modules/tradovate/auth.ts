@@ -1,4 +1,3 @@
-import { getEnv } from "@/lib/env";
 import type { TradovateAccessTokenResponse, TradovateEnvironment } from "./types";
 
 const BASE: Record<TradovateEnvironment, string> = {
@@ -6,55 +5,46 @@ const BASE: Record<TradovateEnvironment, string> = {
   live: "https://live.tradovateapi.com/v1",
 };
 
-type TokenCache = {
-  accessToken: string;
-  expiresAt: number;
+export type TradovateAuth = {
   env: TradovateEnvironment;
+  username: string;
+  password: string;
 };
 
-let cache: TokenCache | null = null;
+type TokenCache = {
+  key: string;
+  accessToken: string;
+  expiresAt: number;
+};
+
+const tokenCache = new Map<string, TokenCache>();
 
 export function getTradovateBaseUrl(env: TradovateEnvironment): string {
   return BASE[env];
 }
 
-/**
- * Access token request using Tradovate credentials / API key.
- * Docs: https://api.tradovate.com/
- */
-export async function getAccessToken(
-  env: TradovateEnvironment,
-): Promise<string> {
+function cacheKey(auth: TradovateAuth): string {
+  return `${auth.env}:${auth.username}`;
+}
+
+export async function getAccessToken(auth: TradovateAuth): Promise<string> {
   const now = Date.now();
-  if (cache && cache.env === env && cache.expiresAt > now + 60_000) {
-    return cache.accessToken;
+  const key = cacheKey(auth);
+  const cached = tokenCache.get(key);
+  if (cached && cached.expiresAt > now + 60_000) {
+    return cached.accessToken;
   }
 
-  const e = getEnv();
-  const username = e.TRADOVATE_USERNAME;
-  const password = e.TRADOVATE_PASSWORD;
-  const cid = e.TRADOVATE_CID;
-  const sec = e.TRADOVATE_SEC;
-
-  if (!username || !password) {
-    throw new Error("Tradovate credentials missing (TRADOVATE_USERNAME/PASSWORD)");
-  }
-
-  const body: Record<string, string | number> = {
-    name: username,
-    password,
-    appId: e.TRADOVATE_APP_ID,
-    appVersion: e.TRADOVATE_APP_VERSION,
-    deviceId: e.TRADOVATE_DEVICE_ID || "SignalPipe",
-  };
-
-  if (cid) body.cid = Number(cid);
-  if (sec) body.sec = sec;
-
-  const res = await fetch(`${getTradovateBaseUrl(env)}/auth/accesstokenrequest`, {
+  const res = await fetch(`${getTradovateBaseUrl(auth.env)}/auth/accesstokenrequest`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      name: auth.username,
+      password: auth.password,
+      appId: "SignalPipe",
+      appVersion: "1.0",
+      deviceId: "SignalPipe",
+    }),
   });
 
   if (!res.ok) {
@@ -74,10 +64,16 @@ export async function getAccessToken(
     ? new Date(data.expirationTime).getTime()
     : now + 50 * 60_000;
 
-  cache = { accessToken: data.accessToken, expiresAt, env };
+  tokenCache.set(key, { key, accessToken: data.accessToken, expiresAt });
   return data.accessToken;
 }
 
-export function clearTokenCache() {
-  cache = null;
+export function clearTokenCache(username?: string) {
+  if (!username) {
+    tokenCache.clear();
+    return;
+  }
+  for (const key of tokenCache.keys()) {
+    if (key.endsWith(`:${username}`)) tokenCache.delete(key);
+  }
 }

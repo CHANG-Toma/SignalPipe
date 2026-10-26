@@ -14,8 +14,6 @@ export const AppSettingsSchema = z.object({
   defaultSymbol: z.string().min(1),
   defaultQty: z.coerce.number().int().positive(),
   killSwitch: z.boolean(),
-  accountId: z.string().optional().default(""),
-  accountSpec: z.string().optional().default(""),
 });
 
 export type AppSettings = z.infer<typeof AppSettingsSchema>;
@@ -27,8 +25,6 @@ const KEYS = [
   "defaultSymbol",
   "defaultQty",
   "killSwitch",
-  "accountId",
-  "accountSpec",
 ] as const;
 
 function coerceValue(key: string, raw: string): unknown {
@@ -50,8 +46,6 @@ export async function getAppSettings(): Promise<AppSettings> {
     defaultSymbol: map.defaultSymbol ?? process.env.DEFAULT_SYMBOL ?? "MNQH5",
     defaultQty: map.defaultQty ?? Number(process.env.DEFAULT_QTY ?? "1"),
     killSwitch: map.killSwitch ?? false,
-    accountId: map.accountId ?? process.env.TRADOVATE_ACCOUNT_ID ?? "",
-    accountSpec: map.accountSpec ?? process.env.TRADOVATE_ACCOUNT_SPEC ?? "",
   });
 }
 
