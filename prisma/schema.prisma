@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+enum MatchType {
+  EXACT
+  CONTAINS
+  REGEX
+}
+
+enum OrderAction {
+  BUY
+  SELL
+  FLATTEN
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+}
+
+model AlertMapping {
+  id        String      @id @default(cuid())
+  pattern   String
+  matchType MatchType   @default(CONTAINS)
+  action    OrderAction
+  quantity  Int?
+  orderType OrderType   @default(MARKET)
+  enabled   Boolean     @default(true)
+  priority  Int         @default(0)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([enabled, priority])
+}
+
+enum ParseStatus {
+  OK
+  FAILED
+  IGNORED
+  DUPLICATE
+}
+
+model WebhookEvent {
+  id              String         @id @default(cuid())
+  receivedAt      DateTime       @default(now())
+  rawBody         String
+  headersJson     String?
+  symbol          String?
+  message         String?
+  strategyOrderId String?
+  parseStatus     ParseStatus
+  parseError      String?
+  idempotencyKey  String?        @unique
+  action          OrderAction?
+  quantity        Int?
+  ignoredReason   String?
+  orderAttempts   OrderAttempt[]
+
+  @@index([receivedAt])
+  @@index([parseStatus])
+}
+
+enum OrderStatus {
+  PENDING
+  SENT
+  ACCEPTED
+  REJECTED
+  FAILED
+  SKIPPED
+}
+
+model OrderAttempt {
+  id               String        @id @default(cuid())
+  webhookEventId   String
+  webhookEvent     WebhookEvent  @relation(fields: [webhookEventId], references: [id], onDelete: Cascade)
+  createdAt        DateTime      @default(now())
+  status           OrderStatus
+  dryRun           Boolean       @default(false)
+  side             OrderAction?
+  quantity         Int?
+  symbol           String?
+  requestPayload   String?
+  responsePayload  String?
+  errorMessage     String?
+  tradovateOrderId String?
+
+  @@index([createdAt])
+  @@index([status])
+}

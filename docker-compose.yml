@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: signalpipe-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: signalpipe
+      POSTGRES_PASSWORD: signalpipe
+      POSTGRES_DB: signalpipe
+    ports:
+      - "5432:5432"
+    volumes:
+      - signalpipe_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U signalpipe -d signalpipe"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  signalpipe_pgdata:
