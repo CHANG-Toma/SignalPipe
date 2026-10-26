@@ -1,8 +1,21 @@
-import { OrderAction, OrderStatus, type OrderType } from "@prisma/client";
+import {
+  OrderAction,
+  OrderStatus,
+  type BrokerAccount,
+  type OrderType,
+} from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { AppSettings, TradingMode } from "@/lib/settings";
-import { flattenSymbol, placeOrder } from "@/modules/tradovate/client";
-import type { PlaceOrderRequest } from "@/modules/tradovate/types";
+import { buildBrackets } from "@/modules/order/brackets";
+import { planPositionAction } from "@/modules/order/policy";
+import {
+  flattenSymbol,
+  getNetPosition,
+  placeOrder,
+  placeOso,
+} from "@/modules/tradovate/client";
+import type { PlaceOrderRequest, PlaceOsoRequest } from "@/modules/tradovate/types";
+import { resolveTradovateSymbol } from "@/modules/symbol/resolve";
 import type { ParsedAlert } from "@/modules/webhook/parser";
 
 function toTradovateAction(action: OrderAction): "Buy" | "Sell" {
@@ -15,8 +28,13 @@ function toTradovateOrderType(orderType: OrderType): PlaceOrderRequest["orderTyp
   return orderType === "LIMIT" ? "Limit" : "Market";
 }
 
-function resolveEnv(mode: TradingMode, settingsEnv: AppSettings["tradovateEnv"]) {
+function resolveEnv(
+  mode: TradingMode,
+  accountEnv: string | undefined,
+  settingsEnv: AppSettings["tradovateEnv"],
+) {
   if (mode === "live") return "live" as const;
+  if (accountEnv === "live" || accountEnv === "demo") return accountEnv;
   return settingsEnv;
 }
 
@@ -25,19 +43,86 @@ export type RouteResult = {
   dryRun: boolean;
   attemptId: string;
   errorMessage?: string;
+  results?: RouteResult[];
 };
 
-/**
- * Route a parsed alert to Tradovate (or dry-run / skip).
- */
-export async function routeOrder(
+async function resolveAccounts(
+  alert: ParsedAlert,
+  settings: AppSettings,
+): Promise<Array<{ account: BrokerAccount; multiplier: number }>> {
+  const enabled = await prisma.brokerAccount.findMany({
+    where: { enabled: true },
+    orderBy: [{ isPrimary: "desc" }, { name: "asc" }],
+  });
+
+  if (alert.targets.length > 0) {
+    const resolved: Array<{ account: BrokerAccount; multiplier: number }> = [];
+    for (const t of alert.targets) {
+      const account =
+        enabled.find((a) => a.accountId === t.accountId) ||
+        enabled.find((a) => a.accountSpec === t.accountId);
+      if (account) resolved.push({ account, multiplier: t.quantityMultiplier });
+    }
+    if (resolved.length > 0) return resolved;
+  }
+
+  const primary = enabled.find((a) => a.isPrimary) || enabled[0] || null;
+  if (primary) {
+    return [{ account: primary, multiplier: primary.quantityMultiplier }];
+  }
+
+  if (settings.accountId && settings.accountSpec) {
+    return [
+      {
+        account: {
+          id: "settings",
+          name: "Settings default",
+          accountId: settings.accountId,
+          accountSpec: settings.accountSpec,
+          environment: settings.tradovateEnv,
+          enabled: true,
+          isPrimary: true,
+          quantityMultiplier: 1,
+          notes: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        multiplier: 1,
+      },
+    ];
+  }
+
+  return [];
+}
+
+async function resolveLotSize(tvSymbol: string | undefined): Promise<number> {
+  if (!tvSymbol) return 1;
+  const mapping = await prisma.symbolMapping.findFirst({
+    where: {
+      enabled: true,
+      OR: [
+        { tradingViewSymbol: tvSymbol },
+        { tradingViewSymbol: tvSymbol.replace(/1!$/, "") },
+      ],
+    },
+  });
+  return mapping?.lotSize && mapping.lotSize > 0 ? mapping.lotSize : 1;
+}
+
+async function routeOne(
   eventId: string,
   alert: ParsedAlert,
   settings: AppSettings,
+  account: BrokerAccount,
+  multiplier: number,
+  symbol: string,
+  lotSize: number,
 ): Promise<RouteResult> {
-  const qty = alert.quantity ?? settings.defaultQty;
-  const symbol = settings.defaultSymbol;
+  const baseQty = alert.quantity ?? settings.defaultQty;
+  const qty = Math.max(1, Math.floor(baseQty * multiplier));
   const dryRun = settings.tradingMode === "dry-run";
+  const env = resolveEnv(settings.tradingMode, account.environment, settings.tradovateEnv);
+  const accountIdNum = Number(account.accountId);
 
   const requestPreview = {
     action: alert.action,
@@ -46,27 +131,67 @@ export async function routeOrder(
     orderType: alert.orderType,
     tradingMode: settings.tradingMode,
     message: alert.message,
+    accountId: account.accountId,
+    reverseOrderClose: alert.reverseOrderClose,
+    sameDirectionIgnore: alert.sameDirectionIgnore,
+    pyramid: alert.pyramid,
+    risk: alert.risk,
   };
 
-  if (settings.killSwitch) {
+  const skipAttempt = async (status: OrderStatus, errorMessage: string, extra?: object) => {
     const attempt = await prisma.orderAttempt.create({
       data: {
         webhookEventId: eventId,
-        status: OrderStatus.SKIPPED,
+        status,
         dryRun,
         side: alert.action,
         quantity: qty,
         symbol,
-        requestPayload: JSON.stringify(requestPreview),
-        errorMessage: "Kill switch active — order ignored",
+        brokerAccountId: account.id === "settings" ? null : account.id,
+        requestPayload: JSON.stringify({ ...requestPreview, ...extra }),
+        errorMessage,
       },
     });
     return {
-      status: OrderStatus.SKIPPED,
+      status,
       dryRun,
       attemptId: attempt.id,
-      errorMessage: attempt.errorMessage ?? undefined,
-    };
+      errorMessage,
+    } satisfies RouteResult;
+  };
+
+  if (settings.killSwitch) {
+    return skipAttempt(OrderStatus.SKIPPED, "Kill switch active — order ignored");
+  }
+
+  if (alert.riskPercentage > 0 && (!alert.quantity || alert.quantity <= 0)) {
+    return skipAttempt(
+      OrderStatus.FAILED,
+      "risk_percentage without fixed quantity is not supported yet — set quantity > 0",
+    );
+  }
+
+  // Position policy (live or dry-run simulation)
+  let netPos = 0;
+  if (!dryRun && accountIdNum) {
+    try {
+      const pos = await getNetPosition(env, accountIdNum, symbol);
+      netPos = pos.netPos;
+    } catch {
+      netPos = 0;
+    }
+  }
+
+  const plan = planPositionAction({
+    action: alert.action,
+    netPos,
+    reverseOrderClose: alert.reverseOrderClose,
+    pyramid: alert.pyramid,
+    sameDirectionIgnore: alert.sameDirectionIgnore,
+  });
+
+  if (plan.skip) {
+    return skipAttempt(OrderStatus.SKIPPED, plan.skip, { netPos, plan });
   }
 
   if (dryRun) {
@@ -78,37 +203,16 @@ export async function routeOrder(
         side: alert.action,
         quantity: qty,
         symbol,
-        requestPayload: JSON.stringify(requestPreview),
+        brokerAccountId: account.id === "settings" ? null : account.id,
+        requestPayload: JSON.stringify({ ...requestPreview, netPos, plan }),
         responsePayload: JSON.stringify({ note: "dry-run: order not sent" }),
       },
     });
     return { status: OrderStatus.SKIPPED, dryRun: true, attemptId: attempt.id };
   }
 
-  const env = resolveEnv(settings.tradingMode, settings.tradovateEnv);
-  const accountId = Number(settings.accountId || process.env.TRADOVATE_ACCOUNT_ID || "");
-  const accountSpec =
-    settings.accountSpec || process.env.TRADOVATE_ACCOUNT_SPEC || "";
-
-  if (!accountId || !accountSpec) {
-    const attempt = await prisma.orderAttempt.create({
-      data: {
-        webhookEventId: eventId,
-        status: OrderStatus.FAILED,
-        dryRun: false,
-        side: alert.action,
-        quantity: qty,
-        symbol,
-        requestPayload: JSON.stringify(requestPreview),
-        errorMessage: "Missing Tradovate accountId / accountSpec in settings",
-      },
-    });
-    return {
-      status: OrderStatus.FAILED,
-      dryRun: false,
-      attemptId: attempt.id,
-      errorMessage: attempt.errorMessage ?? undefined,
-    };
+  if (!accountIdNum || !account.accountSpec) {
+    return skipAttempt(OrderStatus.FAILED, "Missing Tradovate accountId / accountSpec");
   }
 
   const pending = await prisma.orderAttempt.create({
@@ -119,7 +223,8 @@ export async function routeOrder(
       side: alert.action,
       quantity: qty,
       symbol,
-      requestPayload: JSON.stringify(requestPreview),
+      brokerAccountId: account.id === "settings" ? null : account.id,
+      requestPayload: JSON.stringify({ ...requestPreview, netPos, plan }),
     },
   });
 
@@ -127,12 +232,19 @@ export async function routeOrder(
     let response: unknown;
     let tradovateOrderId: string | undefined;
 
-    if (alert.action === OrderAction.FLATTEN) {
-      response = await flattenSymbol(env, accountId, symbol);
-    } else {
-      const order: PlaceOrderRequest = {
-        accountSpec,
-        accountId,
+    if (plan.flattenFirst) {
+      try {
+        await flattenSymbol(env, accountIdNum, symbol);
+      } catch {
+        // no position is acceptable
+      }
+    }
+
+    if (plan.placeEntry && alert.action !== OrderAction.FLATTEN) {
+      const brackets = buildBrackets(alert.action, alert.risk, lotSize);
+      const base: PlaceOrderRequest = {
+        accountSpec: account.accountSpec,
+        accountId: accountIdNum,
         action: toTradovateAction(alert.action),
         symbol,
         orderQty: qty,
@@ -140,16 +252,33 @@ export async function routeOrder(
         isAutomated: true,
         text: `SignalPipe: ${alert.message}`.slice(0, 64),
       };
-      response = await placeOrder(env, order);
+
+      if (alert.orderType === "LIMIT" && alert.risk.entryPrice) {
+        base.price = alert.risk.entryPrice;
+      }
+
+      if (brackets?.bracket1) {
+        const oso: PlaceOsoRequest = {
+          ...base,
+          bracket1: brackets.bracket1,
+          ...(brackets.bracket2 ? { bracket2: brackets.bracket2 } : {}),
+        };
+        response = await placeOso(env, oso);
+      } else {
+        response = await placeOrder(env, base);
+      }
+
       const r = response as { orderId?: number; id?: number };
       tradovateOrderId = String(r.orderId ?? r.id ?? "");
+    } else if (alert.action === OrderAction.FLATTEN) {
+      response = { flattened: true };
     }
 
     const updated = await prisma.orderAttempt.update({
       where: { id: pending.id },
       data: {
         status: OrderStatus.ACCEPTED,
-        responsePayload: JSON.stringify(response),
+        responsePayload: JSON.stringify(response ?? { ok: true }),
         tradovateOrderId: tradovateOrderId || null,
       },
     });
@@ -159,10 +288,7 @@ export async function routeOrder(
     const message = err instanceof Error ? err.message : "Unknown order error";
     const updated = await prisma.orderAttempt.update({
       where: { id: pending.id },
-      data: {
-        status: OrderStatus.FAILED,
-        errorMessage: message,
-      },
+      data: { status: OrderStatus.FAILED, errorMessage: message },
     });
     return {
       status: OrderStatus.FAILED,
@@ -171,4 +297,57 @@ export async function routeOrder(
       errorMessage: message,
     };
   }
+}
+
+export async function routeOrder(
+  eventId: string,
+  alert: ParsedAlert,
+  settings: AppSettings,
+): Promise<RouteResult> {
+  const { tradovateSymbol } = await resolveTradovateSymbol(
+    alert.symbol,
+    settings.defaultSymbol,
+  );
+  const lotSize = await resolveLotSize(alert.symbol);
+  const accounts = await resolveAccounts(alert, settings);
+
+  if (accounts.length === 0) {
+    const attempt = await prisma.orderAttempt.create({
+      data: {
+        webhookEventId: eventId,
+        status: OrderStatus.FAILED,
+        dryRun: settings.tradingMode === "dry-run",
+        side: alert.action,
+        quantity: alert.quantity ?? settings.defaultQty,
+        symbol: tradovateSymbol,
+        requestPayload: JSON.stringify({ alert, note: "no broker account" }),
+        errorMessage: "No broker account configured — add one in Accounts",
+      },
+    });
+    return {
+      status: OrderStatus.FAILED,
+      dryRun: settings.tradingMode === "dry-run",
+      attemptId: attempt.id,
+      errorMessage: attempt.errorMessage ?? undefined,
+    };
+  }
+
+  const results: RouteResult[] = [];
+  for (const { account, multiplier } of accounts) {
+    results.push(
+      await routeOne(
+        eventId,
+        alert,
+        settings,
+        account,
+        multiplier,
+        tradovateSymbol,
+        lotSize,
+      ),
+    );
+  }
+
+  const failed = results.find((r) => r.status === OrderStatus.FAILED);
+  const primary = failed ?? results[0]!;
+  return { ...primary, results };
 }

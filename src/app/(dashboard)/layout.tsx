@@ -1,4 +1,6 @@
-import { Nav } from "@/components/Nav";
+import { MobileNav } from "@/components/MobileNav";
+import { Sidebar } from "@/components/Sidebar";
+import { TopBar } from "@/components/TopBar";
 
 export default function DashboardLayout({
   children,
@@ -7,8 +9,14 @@ export default function DashboardLayout({
 }) {
   return (
     <div className="min-h-screen">
-      <Nav />
-      <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+      <Sidebar />
+      <div className="lg:pl-[var(--sidebar-w)]">
+        <TopBar />
+        <MobileNav />
+        <main className="page-enter mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

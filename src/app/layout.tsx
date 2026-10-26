@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { DM_Sans, IBM_Plex_Mono, Syne } from "next/font/google";
 import "./globals.css";
 
-const plexSans = IBM_Plex_Sans({
+const dmSans = DM_Sans({
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-plex-sans",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-dm-sans",
+});
+
+const syne = Syne({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-syne",
 });
 
 const plexMono = IBM_Plex_Mono({
@@ -16,7 +22,7 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "SignalPipe",
-  description: "TradingView → Tradovate webhook bridge",
+  description: "TradingView → Tradovate automation",
 };
 
 export default function RootLayout({
@@ -25,8 +31,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
-      <body className={plexSans.className}>{children}</body>
+    <html
+      lang="en"
+      className={`${dmSans.variable} ${syne.variable} ${plexMono.variable}`}
+    >
+      <body className={dmSans.className}>{children}</body>
     </html>
   );
 }

@@ -65,8 +65,53 @@ async function main() {
     });
   }
 
+  const symbolCount = await prisma.symbolMapping.count();
+  if (symbolCount === 0) {
+    await prisma.symbolMapping.createMany({
+      data: [
+        {
+          tradingViewSymbol: "MNQ1!",
+          tradovateSymbol: process.env.DEFAULT_SYMBOL ?? "MNQH5",
+          minTick: 0.25,
+          lotSize: 2,
+        },
+        {
+          tradingViewSymbol: "NQ1!",
+          tradovateSymbol: "NQH5",
+          minTick: 0.25,
+          lotSize: 20,
+        },
+        {
+          tradingViewSymbol: "MES1!",
+          tradovateSymbol: "MESH5",
+          minTick: 0.25,
+          lotSize: 5,
+        },
+      ],
+    });
+  }
+
+  const accountId = process.env.TRADOVATE_ACCOUNT_ID;
+  const accountSpec = process.env.TRADOVATE_ACCOUNT_SPEC;
+  if (accountId && accountSpec) {
+    await prisma.brokerAccount.upsert({
+      where: { accountId },
+      update: {
+        accountSpec,
+        environment: process.env.TRADOVATE_ENV ?? "demo",
+      },
+      create: {
+        name: "Primary Tradovate",
+        accountId,
+        accountSpec,
+        environment: process.env.TRADOVATE_ENV ?? "demo",
+        isPrimary: true,
+      },
+    });
+  }
+
   console.log(`Seeded admin user: ${email}`);
-  console.log("Default settings + alert mappings ready.");
+  console.log("Default settings, mappings, symbols ready.");
 }
 
 main()

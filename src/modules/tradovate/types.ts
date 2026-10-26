@@ -14,12 +14,24 @@ export type PlaceOrderRequest = {
   action: "Buy" | "Sell";
   symbol: string;
   orderQty: number;
-  orderType: "Market" | "Limit" | "Stop" | "StopLimit";
+  orderType: "Market" | "Limit" | "Stop" | "StopLimit" | "TrailingStop";
   isAutomated: true;
   price?: number;
   stopPrice?: number;
   timeInForce?: "Day" | "GTC" | "IOC" | "FOK";
   text?: string;
+};
+
+export type BracketOrder = {
+  action: "Buy" | "Sell";
+  orderType: "Limit" | "Stop" | "TrailingStop";
+  price?: number;
+  stopPrice?: number;
+};
+
+export type PlaceOsoRequest = PlaceOrderRequest & {
+  bracket1: BracketOrder;
+  bracket2?: BracketOrder;
 };
 
 export type PlaceOrderResponse = {
@@ -39,5 +51,14 @@ export type LiquidatePositionRequest = {
 export type ContractFindResponse = {
   id: number;
   name?: string;
+  [key: string]: unknown;
+};
+
+export type TradovatePosition = {
+  id?: number;
+  accountId: number;
+  contractId: number;
+  netPos: number;
+  netPrice?: number;
   [key: string]: unknown;
 };

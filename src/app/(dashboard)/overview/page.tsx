@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { KillSwitch } from "@/components/KillSwitch";
+import { PageHeader } from "@/components/PageHeader";
+import { Panel } from "@/components/Panel";
 import { StatusBadge } from "@/components/StatusBadge";
 
 type OverviewData = {
@@ -51,82 +54,117 @@ export default function OverviewPage() {
     return () => clearInterval(t);
   }, []);
 
-  if (error) {
-    return <p className="text-[var(--danger)]">{error}</p>;
-  }
-
-  if (!data) {
-    return <p className="text-[var(--text-muted)]">Loading…</p>;
-  }
+  if (error) return <p className="text-[var(--danger)]">{error}</p>;
+  if (!data) return <p className="text-[var(--text-muted)]">Loading…</p>;
 
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Overview</h1>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
-            Live bridge status and recent webhook activity
-          </p>
-        </div>
-        <KillSwitch initial={data.settings.killSwitch} onChange={() => load()} />
-      </div>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Overview"
+        description="Bridge health, today’s orders, and the latest TradingView alerts."
+        action={
+          <KillSwitch initial={data.settings.killSwitch} onChange={() => load()} />
+        }
+      />
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Mode" value={data.settings.tradingMode} />
         <Stat label="Tradovate" value={data.settings.tradovateEnv} />
         <Stat label="Orders today" value={String(data.counters.ordersToday)} />
         <Stat label="Failures today" value={String(data.counters.failedToday)} />
       </section>
 
-      <section className="border border-[var(--border)] bg-[var(--bg-elevated)] p-4">
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <h2 className="text-sm font-medium">API connection</h2>
-          <StatusBadge
-            label={data.tradovate.ok ? "OK" : "DOWN"}
-            tone={data.tradovate.ok ? "ok" : "danger"}
-          />
-        </div>
-        <p className="font-mono text-sm text-[var(--text-muted)]">{data.tradovate.message}</p>
-        <p className="mt-2 text-sm text-[var(--text-muted)]">
-          Symbol {data.settings.defaultSymbol} · qty {data.settings.defaultQty}
-          {data.settings.killSwitch ? " · trading paused" : ""}
-        </p>
-      </section>
+      <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <Panel title="API connection">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-mono text-sm text-[var(--text-muted)]">
+                {data.tradovate.message}
+              </p>
+              <p className="mt-3 text-sm text-[var(--text-muted)]">
+                Symbol{" "}
+                <span className="font-mono text-[var(--text)]">
+                  {data.settings.defaultSymbol}
+                </span>{" "}
+                · qty{" "}
+                <span className="font-mono text-[var(--text)]">
+                  {data.settings.defaultQty}
+                </span>
+                {data.settings.killSwitch ? " · trading paused" : ""}
+              </p>
+            </div>
+            <StatusBadge
+              label={data.tradovate.ok ? "OK" : "DOWN"}
+              tone={data.tradovate.ok ? "ok" : "danger"}
+            />
+          </div>
+        </Panel>
 
-      <section>
-        <h2 className="mb-3 text-sm font-medium">Recent events</h2>
-        <div className="overflow-x-auto border border-[var(--border)]">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="bg-[var(--bg-muted)] text-[var(--text-muted)]">
+        <Panel title="Next steps">
+          <ol className="space-y-3 text-sm text-[var(--text-muted)]">
+            <li>
+              <Link href="/accounts" className="font-medium text-[var(--accent)] hover:underline">
+                Connect accounts
+              </Link>{" "}
+              and map symbols
+            </li>
+            <li>
+              <Link href="/alerts" className="font-medium text-[var(--accent)] hover:underline">
+                Generate alert
+              </Link>{" "}
+              JSON for TradingView
+            </li>
+            <li>
+              Watch results in the{" "}
+              <Link href="/logs" className="font-medium text-[var(--accent)] hover:underline">
+                alerts log
+              </Link>
+            </li>
+          </ol>
+        </Panel>
+      </div>
+
+      <Panel
+        title="Recent events"
+        flush
+        action={
+          <Link href="/logs" className="text-xs font-medium text-[var(--accent)] hover:underline">
+            View all
+          </Link>
+        }
+      >
+        <div className="overflow-x-auto">
+          <table className="data-table min-w-[640px]">
+            <thead>
               <tr>
-                <th className="px-3 py-2 font-medium">Time</th>
-                <th className="px-3 py-2 font-medium">Message</th>
-                <th className="px-3 py-2 font-medium">Parse</th>
-                <th className="px-3 py-2 font-medium">Action</th>
-                <th className="px-3 py-2 font-medium">Order</th>
+                <th>Time</th>
+                <th>Message</th>
+                <th>Parse</th>
+                <th>Action</th>
+                <th>Order</th>
               </tr>
             </thead>
             <tbody>
               {data.recentEvents.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-[var(--text-muted)]">
-                    No webhooks yet. Send a test alert to see events here.
+                  <td colSpan={5} className="!text-[var(--text-muted)]">
+                    No webhooks yet. Generate an alert and send a test from TradingView.
                   </td>
                 </tr>
               ) : (
                 data.recentEvents.map((ev) => {
                   const attempt = ev.orderAttempts[0];
                   return (
-                    <tr key={ev.id} className="border-t border-[var(--border)]">
-                      <td className="px-3 py-2 font-mono text-xs text-[var(--text-muted)]">
+                    <tr key={ev.id}>
+                      <td className="font-mono text-xs text-[var(--text-muted)]">
                         {new Date(ev.receivedAt).toLocaleString()}
                       </td>
-                      <td className="px-3 py-2 font-mono">{ev.message ?? "—"}</td>
-                      <td className="px-3 py-2">
+                      <td className="font-mono">{ev.message ?? "—"}</td>
+                      <td>
                         <StatusBadge label={ev.parseStatus} tone={parseTone(ev.parseStatus)} />
                       </td>
-                      <td className="px-3 py-2 font-mono text-xs">{ev.action ?? "—"}</td>
-                      <td className="px-3 py-2 font-mono text-xs text-[var(--text-muted)]">
+                      <td className="font-mono text-xs">{ev.action ?? "—"}</td>
+                      <td className="font-mono text-xs text-[var(--text-muted)]">
                         {attempt
                           ? `${attempt.status}${attempt.dryRun ? " (dry)" : ""}`
                           : "—"}
@@ -138,16 +176,18 @@ export default function OverviewPage() {
             </tbody>
           </table>
         </div>
-      </section>
+      </Panel>
     </div>
   );
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-[var(--border)] bg-[var(--bg-elevated)] p-4">
-      <p className="text-xs tracking-wide text-[var(--text-muted)] uppercase">{label}</p>
-      <p className="mt-2 font-mono text-lg">{value}</p>
+    <div className="panel p-4">
+      <p className="font-mono text-[10px] tracking-[0.14em] text-[var(--text-muted)] uppercase">
+        {label}
+      </p>
+      <p className="mt-2 font-display text-2xl font-semibold tracking-tight">{value}</p>
     </div>
   );
 }

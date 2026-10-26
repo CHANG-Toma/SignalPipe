@@ -4,7 +4,9 @@ import type {
   LiquidatePositionRequest,
   PlaceOrderRequest,
   PlaceOrderResponse,
+  PlaceOsoRequest,
   TradovateEnvironment,
+  TradovatePosition,
 } from "./types";
 
 async function tradovateFetch<T>(
@@ -42,17 +44,28 @@ async function tradovateFetch<T>(
   return json as T;
 }
 
-/**
- * Place an order. `isAutomated: true` is mandatory for automated systems.
- */
 export async function placeOrder(
   env: TradovateEnvironment,
   order: PlaceOrderRequest,
 ): Promise<PlaceOrderResponse> {
   if (order.isAutomated !== true) {
-    throw new Error("isAutomated must be true for SignalPipe orders");
+    throw new Error("isAutomated must be true for automated orders");
   }
   return tradovateFetch<PlaceOrderResponse>(env, "/order/placeorder", {
+    method: "POST",
+    body: JSON.stringify(order),
+  });
+}
+
+/** Entry + optional SL/TP brackets (OCO when both brackets set). */
+export async function placeOso(
+  env: TradovateEnvironment,
+  order: PlaceOsoRequest,
+): Promise<PlaceOrderResponse> {
+  if (order.isAutomated !== true) {
+    throw new Error("isAutomated must be true for automated orders");
+  }
+  return tradovateFetch<PlaceOrderResponse>(env, "/order/placeoso", {
     method: "POST",
     body: JSON.stringify(order),
   });
@@ -69,9 +82,36 @@ export async function findContract(
   );
 }
 
-/**
- * Liquidate / flatten position for a contract (requires contractId from /contract/find).
- */
+export async function listPositions(
+  env: TradovateEnvironment,
+): Promise<TradovatePosition[]> {
+  const data = await tradovateFetch<TradovatePosition[] | TradovatePosition>(
+    env,
+    "/position/list",
+  );
+  return Array.isArray(data) ? data : data ? [data] : [];
+}
+
+export async function getNetPosition(
+  env: TradovateEnvironment,
+  accountId: number,
+  symbol: string,
+): Promise<{ netPos: number; netPrice?: number; contractId?: number }> {
+  const contract = await findContract(env, symbol);
+  if (!contract?.id) {
+    return { netPos: 0 };
+  }
+  const positions = await listPositions(env);
+  const pos = positions.find(
+    (p) => p.accountId === accountId && p.contractId === contract.id,
+  );
+  return {
+    netPos: pos?.netPos ?? 0,
+    netPrice: pos?.netPrice,
+    contractId: contract.id,
+  };
+}
+
 export async function liquidatePosition(
   env: TradovateEnvironment,
   body: LiquidatePositionRequest,

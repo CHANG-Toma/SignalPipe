@@ -2,9 +2,8 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { KillSwitch } from "@/components/KillSwitch";
-
-const fieldClass =
-  "w-full rounded border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]";
+import { PageHeader } from "@/components/PageHeader";
+import { Panel } from "@/components/Panel";
 
 type Settings = {
   tradingMode: "dry-run" | "demo" | "live";
@@ -115,24 +114,21 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-10">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Webhook secret, trading mode, symbol, and alert mappings
-        </p>
-      </div>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Settings"
+        description="Webhook secret, trading mode, defaults, and legacy comment mappings."
+      />
 
-      <section className="max-w-xl">
-        <h2 className="mb-3 text-sm font-medium">Kill switch</h2>
+      <Panel title="Kill switch" className="max-w-xl">
         <KillSwitch
           initial={settings.killSwitch}
           onChange={(enabled) => setSettings({ ...settings, killSwitch: enabled })}
         />
-      </section>
+      </Panel>
 
-      <form onSubmit={saveSettings} className="grid max-w-xl gap-4">
-        <h2 className="text-sm font-medium">Bridge</h2>
+      <Panel title="Bridge" className="max-w-xl">
+      <form onSubmit={saveSettings} className="grid gap-4">
 
         <Field label="Trading mode">
           <select
@@ -143,7 +139,7 @@ export default function SettingsPage() {
                 tradingMode: e.target.value as Settings["tradingMode"],
               })
             }
-            className={fieldClass}
+            className="field"
           >
             <option value="dry-run">dry-run (parse + log only)</option>
             <option value="demo">demo (send to Tradovate demo)</option>
@@ -160,7 +156,7 @@ export default function SettingsPage() {
                 tradovateEnv: e.target.value as Settings["tradovateEnv"],
               })
             }
-            className={fieldClass}
+            className="field"
           >
             <option value="demo">demo.tradovateapi.com</option>
             <option value="live">live.tradovateapi.com</option>
@@ -171,7 +167,7 @@ export default function SettingsPage() {
           <input
             value={settings.defaultSymbol}
             onChange={(e) => setSettings({ ...settings, defaultSymbol: e.target.value })}
-            className={`${fieldClass} font-mono`}
+            className="field font-mono"
           />
         </Field>
 
@@ -183,7 +179,7 @@ export default function SettingsPage() {
             onChange={(e) =>
               setSettings({ ...settings, defaultQty: Number(e.target.value) })
             }
-            className={`${fieldClass} font-mono`}
+            className="field font-mono"
           />
         </Field>
 
@@ -191,7 +187,7 @@ export default function SettingsPage() {
           <input
             value={settings.accountId}
             onChange={(e) => setSettings({ ...settings, accountId: e.target.value })}
-            className={`${fieldClass} font-mono`}
+            className="field font-mono"
             placeholder="Tradovate numeric accountId"
           />
         </Field>
@@ -200,7 +196,7 @@ export default function SettingsPage() {
           <input
             value={settings.accountSpec}
             onChange={(e) => setSettings({ ...settings, accountSpec: e.target.value })}
-            className={`${fieldClass} font-mono`}
+            className="field font-mono"
             placeholder="e.g. DEMO1234567"
           />
         </Field>
@@ -210,7 +206,7 @@ export default function SettingsPage() {
             type="password"
             value={newSecret}
             onChange={(e) => setNewSecret(e.target.value)}
-            className={`${fieldClass} font-mono`}
+            className="field font-mono"
             placeholder="Leave blank to keep current"
             autoComplete="off"
           />
@@ -219,37 +215,34 @@ export default function SettingsPage() {
         {message ? <p className="text-sm text-[var(--ok)]">{message}</p> : null}
         {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
 
-        <button
-          type="submit"
-          className="w-fit rounded bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[#07140e]"
-        >
+        <button type="submit" className="btn btn-primary w-fit">
           Save settings
         </button>
       </form>
+      </Panel>
 
-      <section className="flex flex-col gap-4">
-        <h2 className="text-sm font-medium">Alert mappings</h2>
-        <div className="overflow-x-auto border border-[var(--border)]">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="bg-[var(--bg-muted)] text-[var(--text-muted)]">
+      <Panel title="Legacy alert mappings" flush>
+        <div className="overflow-x-auto">
+          <table className="data-table min-w-[640px]">
+            <thead>
               <tr>
-                <th className="px-3 py-2">Pattern</th>
-                <th className="px-3 py-2">Match</th>
-                <th className="px-3 py-2">Action</th>
-                <th className="px-3 py-2">Qty</th>
-                <th className="px-3 py-2">Priority</th>
-                <th className="px-3 py-2" />
+                <th>Pattern</th>
+                <th>Match</th>
+                <th>Action</th>
+                <th>Qty</th>
+                <th>Priority</th>
+                <th />
               </tr>
             </thead>
             <tbody>
               {mappings.map((m) => (
-                <tr key={m.id} className="border-t border-[var(--border)]">
-                  <td className="px-3 py-2 font-mono">{m.pattern}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{m.matchType}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{m.action}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{m.quantity ?? "default"}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{m.priority}</td>
-                  <td className="px-3 py-2 text-right">
+                <tr key={m.id}>
+                  <td className="font-mono">{m.pattern}</td>
+                  <td className="font-mono text-xs">{m.matchType}</td>
+                  <td className="font-mono text-xs">{m.action}</td>
+                  <td className="font-mono text-xs">{m.quantity ?? "default"}</td>
+                  <td className="font-mono text-xs">{m.priority}</td>
+                  <td className="text-right">
                     <button
                       type="button"
                       onClick={() => removeMapping(m.id)}
@@ -263,25 +256,23 @@ export default function SettingsPage() {
             </tbody>
           </table>
         </div>
+      </Panel>
 
-        <form
-          onSubmit={addMapping}
-          className="grid max-w-xl gap-3 border border-[var(--border)] bg-[var(--bg-elevated)] p-4"
-        >
-          <p className="text-sm text-[var(--text-muted)]">Add mapping</p>
+      <Panel title="Add mapping" className="max-w-xl">
+        <form onSubmit={addMapping} className="grid gap-3">
           <input
             name="pattern"
             required
             placeholder="buy 01"
-            className={`${fieldClass} font-mono`}
+            className="field font-mono"
           />
           <div className="grid grid-cols-2 gap-3">
-            <select name="matchType" defaultValue="CONTAINS" className={fieldClass}>
+            <select name="matchType" defaultValue="CONTAINS" className="field">
               <option value="CONTAINS">CONTAINS</option>
               <option value="EXACT">EXACT</option>
               <option value="REGEX">REGEX</option>
             </select>
-            <select name="action" defaultValue="BUY" className={fieldClass}>
+            <select name="action" defaultValue="BUY" className="field">
               <option value="BUY">BUY</option>
               <option value="SELL">SELL</option>
               <option value="FLATTEN">FLATTEN</option>
@@ -293,18 +284,15 @@ export default function SettingsPage() {
               type="number"
               min={1}
               placeholder="qty (optional)"
-              className={fieldClass}
+              className="field"
             />
-            <input name="priority" type="number" defaultValue={10} className={fieldClass} />
+            <input name="priority" type="number" defaultValue={10} className="field" />
           </div>
-          <button
-            type="submit"
-            className="w-fit rounded border border-[var(--border)] bg-[var(--bg-muted)] px-4 py-2 text-sm"
-          >
+          <button type="submit" className="btn btn-secondary w-fit">
             Add mapping
           </button>
         </form>
-      </section>
+      </Panel>
     </div>
   );
 }

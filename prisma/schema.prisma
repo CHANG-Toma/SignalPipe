@@ -54,6 +54,41 @@ model AlertMapping {
   @@index([enabled, priority])
 }
 
+/// Tradovate broker account
+model BrokerAccount {
+  id                 String   @id @default(cuid())
+  name               String
+  accountId          String
+  accountSpec        String
+  environment        String   @default("demo")
+  enabled            Boolean  @default(true)
+  isPrimary          Boolean  @default(false)
+  quantityMultiplier Float    @default(1)
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([accountId])
+  @@index([enabled, isPrimary])
+}
+
+/// TradingView symbol → Tradovate contract
+model SymbolMapping {
+  id                String    @id @default(cuid())
+  tradingViewSymbol String
+  tradovateSymbol   String
+  orderType         OrderType @default(MARKET)
+  defaultQty        Int?
+  minTick           Float?
+  lotSize           Float?
+  overrideMapping   Boolean   @default(false)
+  enabled           Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([tradingViewSymbol])
+}
+
 enum ParseStatus {
   OK
   FAILED
@@ -91,12 +126,12 @@ enum OrderStatus {
 }
 
 model OrderAttempt {
-  id               String        @id @default(cuid())
+  id               String       @id @default(cuid())
   webhookEventId   String
-  webhookEvent     WebhookEvent  @relation(fields: [webhookEventId], references: [id], onDelete: Cascade)
-  createdAt        DateTime      @default(now())
+  webhookEvent     WebhookEvent @relation(fields: [webhookEventId], references: [id], onDelete: Cascade)
+  createdAt        DateTime     @default(now())
   status           OrderStatus
-  dryRun           Boolean       @default(false)
+  dryRun           Boolean      @default(false)
   side             OrderAction?
   quantity         Int?
   symbol           String?
@@ -104,7 +139,19 @@ model OrderAttempt {
   responsePayload  String?
   errorMessage     String?
   tradovateOrderId String?
+  brokerAccountId  String?
 
   @@index([createdAt])
   @@index([status])
+}
+
+model SavedAlert {
+  id         String   @id @default(cuid())
+  name       String
+  source     String
+  configJson String
+  alertJson  String
+  webhookUrl String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }

@@ -1,9 +1,9 @@
 type Tone = "ok" | "warn" | "danger" | "muted";
 
 const tones: Record<Tone, string> = {
-  ok: "bg-[color-mix(in_srgb,var(--ok)_18%,transparent)] text-[var(--ok)]",
-  warn: "bg-[color-mix(in_srgb,var(--warning)_18%,transparent)] text-[var(--warning)]",
-  danger: "bg-[color-mix(in_srgb,var(--danger)_18%,transparent)] text-[var(--danger)]",
+  ok: "bg-[var(--ok-soft)] text-[var(--ok)]",
+  warn: "bg-[var(--warning-soft)] text-[var(--warning)]",
+  danger: "bg-[var(--danger-soft)] text-[var(--danger)]",
   muted: "bg-[var(--bg-muted)] text-[var(--text-muted)]",
 };
 
@@ -16,7 +16,7 @@ export function StatusBadge({
 }) {
   return (
     <span
-      className={`inline-flex items-center rounded px-2 py-0.5 font-mono text-xs tracking-wide ${tones[tone]}`}
+      className={`inline-flex items-center rounded-md px-2 py-0.5 font-mono text-[11px] tracking-wide ${tones[tone]}`}
     >
       {label}
     </span>

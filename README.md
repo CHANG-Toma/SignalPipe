@@ -1,171 +1,87 @@
 # SignalPipe
 
-Personal TradingView → Tradovate webhook bridge (PickMyTrade alternative for a single user).
+Personal TradingView → Tradovate automation bridge.
 
-Receives TradingView alerts over HTTPS, maps message patterns (`buy 01`, `sell 01`, `close`…) to orders, and places them on Tradovate (`isAutomated: true`). Starts in **dry-run** mode.
+1. Link Tradovate account(s)
+2. Map TradingView symbols → Tradovate contracts
+3. Generate alert JSON + webhook URL
+4. Paste into TradingView
+5. Orders execute on Tradovate (`isAutomated: true`)
+
+Default safety mode: **dry-run** (parse + log, no live orders).
 
 ## Stack
 
 - Next.js 15 (App Router) + TypeScript
 - PostgreSQL + Prisma
-- NextAuth (credentials, single admin)
+- NextAuth (single admin)
 - Tailwind CSS
 - Docker Compose (Postgres)
 
-## Quick start (≈5 minutes)
-
-### 1. Clone / open the project
-
-```bash
-cd SignalPipe
-```
-
-### 2. Environment
+## Quick start
 
 ```bash
 cp .env.example .env
-```
-
-Edit `.env` at least:
-
-- `NEXTAUTH_SECRET` — long random string
-- `ADMIN_EMAIL` / `ADMIN_PASSWORD` — your login
-- `WEBHOOK_SECRET` — secret embedded in the TradingView webhook URL
-
-### 3. Start Postgres
-
-```bash
 docker compose up -d
-```
-
-### 4. Install & migrate
-
-```bash
 npm install
 npm run db:migrate
 npm run db:seed
-```
-
-### 5. Run the app
-
-```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+Open [http://localhost:3000](http://localhost:3000) — login with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
-## Test a webhook with curl
+## Process (same every time)
 
-Default mode is **dry-run**: parse + log, no order sent to Tradovate.
+1. **Accounts** — add Tradovate Account ID + Spec, set primary; map symbols (`MNQ1!` → front month)
+2. Header — choose **Demo** or **Live**; keep `dry-run` until tested
+3. **Generate alert** — Strategy or Indicator → exits (No SL/TP / Attach SL/TP) → accounts → Generate
+4. Copy **Webhook URL** + **Alert JSON** into TradingView (Message = JSON only)
+5. **Alerts log** — verify incoming webhooks and order attempts
+6. **Pause** in the header to stop execution without deleting alerts
+
+## Alert JSON fields
+
+| Field | Role |
+|--------|------|
+| `data` | `buy` / `sell` / `close` (or `{{strategy.order.action}}`) |
+| `quantity` | Contracts (or `{{strategy.order.contracts}}`) |
+| `token` | Auth token (matches webhook secret) |
+| `account_id` | Tradovate account |
+| `multiple_accounts` | Extra accounts + multipliers |
+| `reverse_order_close` | Flatten opposite / existing before entry |
+| `pyramid` | Allow stacking same-direction positions |
+| `same_direction_ignore` | Skip if already same side |
+| `sl` / `tp` / `dollar_*` / `percentage_*` | Bracket levels via Tradovate OSO |
+| `order_type` | `MKT` or `LMT` |
+
+## Test webhook
 
 ```bash
 curl -X POST "http://localhost:3000/api/webhook/YOUR_WEBHOOK_SECRET" \
   -H "Content-Type: application/json" \
-  -d "{\"message\":\"buy 01\",\"symbol\":\"MNQ1!\",\"strategy\":{\"order\":{\"id\":\"test-001\",\"comment\":\"buy 01\"}}}"
+  -d "{\"symbol\":\"MNQ1!\",\"data\":\"buy\",\"quantity\":1,\"risk_percentage\":0,\"token\":\"YOUR_WEBHOOK_SECRET\",\"account_id\":\"YOUR_ACCOUNT_ID\",\"reverse_order_close\":true,\"order_type\":\"MKT\",\"price\":21000,\"sl\":10,\"tp\":20}"
 ```
 
-Check **Logs** / **Overview** in the UI.
+## Tradovate credentials
 
-Sell example:
+Fill in `.env`:
 
-```bash
-curl -X POST "http://localhost:3000/api/webhook/YOUR_WEBHOOK_SECRET" \
-  -H "Content-Type: application/json" \
-  -d "{\"message\":\"sell 01\",\"strategy\":{\"order\":{\"id\":\"test-002\",\"comment\":\"sell 01\"}}}"
-```
+- `TRADOVATE_USERNAME` / `TRADOVATE_PASSWORD`
+- `TRADOVATE_CID` / `TRADOVATE_SEC` if required
+- Account ID / Spec via **Accounts** UI (preferred)
 
-Unauthorized (wrong secret → 401):
-
-```bash
-curl -i -X POST "http://localhost:3000/api/webhook/wrong-secret" \
-  -H "Content-Type: application/json" \
-  -d "{\"message\":\"buy 01\"}"
-```
-
-## TradingView alert URL
-
-```
-https://YOUR_PUBLIC_HOST/api/webhook/YOUR_WEBHOOK_SECRET
-```
-
-Suggested JSON message body (customize in the alert dialog):
-
-```json
-{
-  "message": "{{strategy.order.comment}}",
-  "symbol": "{{ticker}}",
-  "strategy": {
-    "order": {
-      "id": "{{strategy.order.id}}",
-      "action": "{{strategy.order.action}}",
-      "contracts": "{{strategy.order.contracts}}",
-      "comment": "{{strategy.order.comment}}"
-    }
-  }
-}
-```
-
-## Tradovate (demo → live)
-
-1. Create API credentials in Tradovate (demo first).
-2. Fill in `.env`:
-
-   - `TRADOVATE_USERNAME` / `TRADOVATE_PASSWORD`
-   - `TRADOVATE_CID` / `TRADOVATE_SEC` (if required by your app registration)
-   - Account id / spec via Settings UI or `TRADOVATE_ACCOUNT_ID` / `TRADOVATE_ACCOUNT_SPEC`
-
-3. In **Settings**:
-   - Keep `tradovateEnv = demo`
-   - Switch `tradingMode` from `dry-run` → `demo`
-4. Only later: `tradingMode = live` + `tradovateEnv = live`
-
-Official docs: [https://api.tradovate.com/](https://api.tradovate.com/)
-
-Orders always send `isAutomated: true`.
-
-## Safety
-
-| Control | Behavior |
-|--------|----------|
-| `tradingMode=dry-run` | Parse + DB logs only |
-| Kill switch | Ignores order routing |
-| Rate limit | 60 req/min/IP on webhook |
-| Secrets | Never shown in full in UI logs |
+Official API: [https://api.tradovate.com/](https://api.tradovate.com/)
 
 ## npm scripts
 
 | Script | Description |
 |--------|-------------|
-| `npm run dev` | Next.js dev server |
-| `npm run build` / `start` | Production build |
-| `npm run db:migrate` | Prisma migrate (dev) |
+| `npm run dev` | Dev server |
+| `npm run db:migrate` | Apply migrations |
+| `npm run db:seed` | Admin + defaults |
 | `npm run db:studio` | Prisma Studio |
-| `npm run db:seed` | Admin user + default mappings |
 
 ## Deploy (VPS later)
 
-Not automated in this repo. Outline for a typical VPS (e.g. OVH):
-
-1. Reverse proxy (Caddy/Nginx) with HTTPS → `localhost:3000`
-2. Postgres (Docker or managed)
-3. `npm run build && npm start` (or PM2 / systemd)
-4. Set production env vars (`NEXTAUTH_URL` = public HTTPS URL)
-5. Point TradingView webhook to `https://your-domain/api/webhook/<secret>`
-
-## Project layout
-
-```
-src/
-  app/                 # UI + API routes
-  components/          # Nav, KillSwitch, badges
-  lib/                 # prisma, auth, settings, rate-limit
-  modules/
-    webhook/           # parse + idempotency
-    tradovate/         # auth + placeorder client
-    order/             # order router
-prisma/                # schema + seed
-```
-
-## License
-
-Private / personal use.
+HTTPS reverse proxy → app, Postgres, production env (`NEXTAUTH_URL` = public URL), TradingView webhook → that URL.

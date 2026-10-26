@@ -35,18 +35,14 @@ export function KillSwitch({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col items-end gap-2">
       <button
         type="button"
         disabled={busy}
         onClick={toggle}
-        className={`rounded border px-4 py-2 text-sm font-medium transition disabled:opacity-50 ${
-          enabled
-            ? "border-[var(--danger)] bg-[color-mix(in_srgb,var(--danger)_15%,transparent)] text-[var(--danger)]"
-            : "border-[var(--border)] bg-[var(--bg-muted)] text-[var(--text)] hover:border-[var(--accent)]"
-        }`}
+        className={enabled ? "btn btn-danger" : "btn btn-secondary"}
       >
-        {enabled ? "Trading paused — click to resume" : "Pause trading (kill switch)"}
+        {enabled ? "Trading paused — resume" : "Pause trading"}
       </button>
       {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
     </div>

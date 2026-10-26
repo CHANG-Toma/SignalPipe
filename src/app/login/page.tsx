@@ -29,50 +29,73 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4">
-      <div className="mb-8">
-        <p className="font-mono text-xs tracking-[0.25em] text-[var(--accent)] uppercase">
-          SignalPipe
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight">Sign in</h1>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Personal TradingView → Tradovate bridge
-        </p>
-      </div>
+    <main className="relative flex min-h-screen">
+      <section className="relative hidden w-[46%] overflow-hidden bg-[var(--bg-sidebar)] lg:flex lg:flex-col lg:justify-between lg:p-10">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-40"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 20% 20%, rgba(15,118,110,0.45), transparent 45%), radial-gradient(circle at 80% 80%, rgba(226,88,12,0.18), transparent 40%)",
+          }}
+        />
+        <div className="relative">
+          <p className="font-display text-3xl font-semibold tracking-tight text-white">
+            SignalPipe
+          </p>
+          <p className="mt-2 max-w-xs text-sm leading-relaxed text-[var(--text-sidebar-muted)]">
+            Route TradingView alerts to Tradovate with clear controls and dry-run safety.
+          </p>
+        </div>
+        <div className="relative space-y-4 text-sm text-[var(--text-sidebar-muted)]">
+          <p className="font-mono text-[11px] tracking-[0.16em] text-[var(--accent)] uppercase">
+            Workflow
+          </p>
+          <ol className="space-y-2 text-[var(--text-inverse)]/85">
+            <li>1. Connect Tradovate accounts</li>
+            <li>2. Generate alert JSON</li>
+            <li>3. Monitor the alerts log</li>
+          </ol>
+        </div>
+      </section>
 
-      <form
-        onSubmit={onSubmit}
-        className="flex flex-col gap-4 border border-[var(--border)] bg-[var(--bg-elevated)] p-6"
-      >
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-[var(--text-muted)]">Email</span>
-          <input
-            name="email"
-            type="email"
-            required
-            autoComplete="username"
-            className="rounded border border-[var(--border)] bg-[var(--bg)] px-3 py-2 outline-none focus:border-[var(--accent)]"
-          />
-        </label>
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-[var(--text-muted)]">Password</span>
-          <input
-            name="password"
-            type="password"
-            required
-            autoComplete="current-password"
-            className="rounded border border-[var(--border)] bg-[var(--bg)] px-3 py-2 outline-none focus:border-[var(--accent)]"
-          />
-        </label>
-        {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
-        <button
-          type="submit"
-          disabled={busy}
-          className="mt-2 rounded bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[#07140e] hover:bg-[var(--accent-dim)] hover:text-[var(--text)] disabled:opacity-50"
-        >
-          {busy ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
+      <section className="flex flex-1 items-center justify-center px-6 py-12">
+        <div className="page-enter w-full max-w-md">
+          <p className="font-display text-2xl font-semibold tracking-tight lg:hidden">
+            SignalPipe
+          </p>
+          <h1 className="mt-6 font-display text-3xl font-semibold tracking-tight">Sign in</h1>
+          <p className="mt-2 text-sm text-[var(--text-muted)]">
+            Personal automation desk for Tradovate
+          </p>
+
+          <form onSubmit={onSubmit} className="panel mt-8 flex flex-col gap-4 p-6">
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="text-[var(--text-muted)]">Email</span>
+              <input
+                name="email"
+                type="email"
+                required
+                autoComplete="username"
+                className="field"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="text-[var(--text-muted)]">Password</span>
+              <input
+                name="password"
+                type="password"
+                required
+                autoComplete="current-password"
+                className="field"
+              />
+            </label>
+            {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
+            <button type="submit" disabled={busy} className="btn btn-primary mt-1">
+              {busy ? "Signing in…" : "Sign in"}
+            </button>
+          </form>
+        </div>
+      </section>
     </main>
   );
 }

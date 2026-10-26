@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { PageHeader } from "@/components/PageHeader";
+import { Panel } from "@/components/Panel";
 import { StatusBadge } from "@/components/StatusBadge";
 
 type LogItem = {
@@ -64,25 +66,23 @@ export default function LogsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Logs</h1>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          {total} webhook event{total === 1 ? "" : "s"}
-        </p>
-      </div>
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title="Alerts log"
+        description={`${total} incoming alert${total === 1 ? "" : "s"} from TradingView.`}
+      />
 
       <form onSubmit={onFilter} className="flex flex-wrap gap-3">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search message / symbol"
-          className="min-w-[200px] flex-1 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+          className="field min-w-[200px] flex-1"
         />
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm"
+          className="field w-auto"
         >
           <option value="">All statuses</option>
           <option value="OK">OK</option>
@@ -90,68 +90,64 @@ export default function LogsPage() {
           <option value="IGNORED">IGNORED</option>
           <option value="DUPLICATE">DUPLICATE</option>
         </select>
-        <button
-          type="submit"
-          className="rounded border border-[var(--border)] bg-[var(--bg-muted)] px-4 py-2 text-sm hover:border-[var(--accent)]"
-        >
+        <button type="submit" className="btn btn-secondary">
           Filter
         </button>
       </form>
 
       {error ? <p className="text-[var(--danger)]">{error}</p> : null}
 
-      <div className="overflow-x-auto border border-[var(--border)]">
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead className="bg-[var(--bg-muted)] text-[var(--text-muted)]">
-            <tr>
-              <th className="px-3 py-2 font-medium">Time</th>
-              <th className="px-3 py-2 font-medium">Message</th>
-              <th className="px-3 py-2 font-medium">Symbol</th>
-              <th className="px-3 py-2 font-medium">Parse</th>
-              <th className="px-3 py-2 font-medium">Order</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => {
-              const attempt = item.orderAttempts[0];
-              return (
-                <tr
-                  key={item.id}
-                  className="cursor-pointer border-t border-[var(--border)] hover:bg-[var(--bg-muted)]/50"
-                  onClick={() => setSelected(item)}
-                >
-                  <td className="px-3 py-2 font-mono text-xs text-[var(--text-muted)]">
-                    {new Date(item.receivedAt).toLocaleString()}
-                  </td>
-                  <td className="px-3 py-2 font-mono">{item.message ?? "—"}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{item.symbol ?? "—"}</td>
-                  <td className="px-3 py-2">
-                    <StatusBadge label={item.parseStatus} tone={parseTone(item.parseStatus)} />
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs text-[var(--text-muted)]">
-                    {attempt
-                      ? `${attempt.status}${attempt.dryRun ? " (dry)" : ""}`
-                      : "—"}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <Panel flush>
+        <div className="overflow-x-auto">
+          <table className="data-table min-w-[720px]">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Message</th>
+                <th>Symbol</th>
+                <th>Parse</th>
+                <th>Order</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => {
+                const attempt = item.orderAttempts[0];
+                return (
+                  <tr
+                    key={item.id}
+                    className="cursor-pointer"
+                    onClick={() => setSelected(item)}
+                  >
+                    <td className="font-mono text-xs text-[var(--text-muted)]">
+                      {new Date(item.receivedAt).toLocaleString()}
+                    </td>
+                    <td className="font-mono">{item.message ?? "—"}</td>
+                    <td className="font-mono text-xs">{item.symbol ?? "—"}</td>
+                    <td>
+                      <StatusBadge label={item.parseStatus} tone={parseTone(item.parseStatus)} />
+                    </td>
+                    <td className="font-mono text-xs text-[var(--text-muted)]">
+                      {attempt
+                        ? `${attempt.status}${attempt.dryRun ? " (dry)" : ""}`
+                        : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
 
       {selected ? (
-        <div className="border border-[var(--border)] bg-[var(--bg-elevated)] p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-medium">Event detail</h2>
-            <button
-              type="button"
-              className="text-sm text-[var(--text-muted)] hover:text-[var(--text)]"
-              onClick={() => setSelected(null)}
-            >
+        <Panel
+          title="Event detail"
+          action={
+            <button type="button" className="btn btn-ghost !py-1 text-xs" onClick={() => setSelected(null)}>
               Close
             </button>
-          </div>
+          }
+        >
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-[var(--text-muted)]">Action</dt>
@@ -172,10 +168,10 @@ export default function LogsPage() {
               {a.errorMessage ? ` · ${a.errorMessage}` : ""}
             </p>
           ))}
-          <pre className="mt-4 max-h-64 overflow-auto rounded bg-[var(--bg)] p-3 font-mono text-xs text-[var(--text-muted)]">
+          <pre className="mt-4 max-h-64 overflow-auto rounded-lg bg-[var(--bg-muted)] p-3 font-mono text-xs text-[var(--text-muted)]">
             {safePretty(selected.rawBody)}
           </pre>
-        </div>
+        </Panel>
       ) : null}
     </div>
   );
